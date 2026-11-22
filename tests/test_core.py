@@ -3,7 +3,8 @@
 import pandas as pd
 import pytest
 
-from transit_sql.agent import UnsafeSQL, check_sql, run_sql
+import transit_sql.agent as agent
+from transit_sql.agent import UnsafeSQL, ask, check_sql, run_sql
 from transit_sql.context import MODES, build_context, load_layer
 from transit_sql.data import connect
 from transit_sql.evaluate import load_gold, results_match
@@ -100,3 +101,26 @@ def test_match_top_item_from_ranked_list():
     years = pd.DataFrame({"year": [2020, 2025], "otp": [97.6, 96.8]})
     assert results_match(pd.DataFrame({"year": [2020]}), years, top_only=True)
     assert not results_match(pd.DataFrame({"year": [2020]}), years)  # scalar questions stay strict
+
+
+# --- repair loop ----------------------------------------------------------
+
+EMPTY = "SELECT * FROM trips_daily WHERE year(service_date) = 1990"
+ROWS = "SELECT SUM(trips) AS trips FROM trips_daily WHERE year(service_date) = 2024"
+
+
+def _fake_model(monkeypatch, *sqls):
+    replies = iter(sqls)
+    monkeypatch.setattr(agent, "_call_cli", lambda m, s, msgs: ({"sql": next(replies), "notes": ""}, 0, 0))
+
+
+def test_empty_result_gets_one_retry(con, monkeypatch):
+    _fake_model(monkeypatch, EMPTY, ROWS)
+    ans = ask("q", con, backend="claude-cli")
+    assert ans.attempts == 2 and len(ans.df) == 1 and ans.error is None
+
+
+def test_empty_result_kept_on_last_attempt(con, monkeypatch):
+    _fake_model(monkeypatch, EMPTY, EMPTY)
+    ans = ask("q", con, backend="claude-cli")
+    assert ans.attempts == 2 and ans.df.empty and ans.error is None

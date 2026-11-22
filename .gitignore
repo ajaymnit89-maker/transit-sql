@@ -5,3 +5,4 @@ __pycache__/
 data/paratransit.duckdb
 evals/results/*.csv
 !evals/results/.gitkeep
+study.md

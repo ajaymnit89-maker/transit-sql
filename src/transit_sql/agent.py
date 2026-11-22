@@ -1,7 +1,7 @@
 """Text-to-SQL: question -> Claude writes SQL -> validate -> run on DuckDB.
 
-One LLM call per attempt. If the SQL fails to run, the error goes back to
-Claude once for a fix. That is the whole loop.
+One LLM call per attempt. If the SQL fails to run or returns no rows, that
+goes back to Claude once for a fix. That is the whole loop.
 """
 
 import json
@@ -163,11 +163,16 @@ def ask(
             return ans
         try:
             ans.df, ans.error = run_sql(con, ans.sql), None
-            return ans
         except (UnsafeSQL, duckdb.Error, sqlglot.errors.ParseError) as e:
             ans.error = str(e)
-            messages += [
-                {"role": "assistant", "content": json.dumps(out)},
-                {"role": "user", "content": f"That SQL failed:\n{e}\nReturn a corrected query."},
-            ]
+            feedback = f"That SQL failed:\n{e}\nReturn a corrected query."
+        else:
+            if not ans.df.empty or ans.attempts == max_attempts:
+                return ans  # an empty result on the last attempt may be the true answer
+            feedback = ("That SQL ran but returned no rows. Check the filters against the "
+                        "data's date ranges and values. If no rows is the true answer, return the same query.")
+        messages += [
+            {"role": "assistant", "content": json.dumps(out)},
+            {"role": "user", "content": feedback},
+        ]
     return ans

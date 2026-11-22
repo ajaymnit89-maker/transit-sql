@@ -4,7 +4,7 @@ Ask questions about NYC Access-A-Ride (paratransit) service in plain English and
 
 > "What was pickup on-time performance in 2025?" → `92.0%`, with the SQL shown.
 
-**Status:** working end to end; first evaluation scored 31/32 (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
+**Status:** working end to end; the latest evaluation scored 32/32 (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
 
 ## Why this project
 
@@ -26,7 +26,7 @@ question ──► context (schema + data dictionary + metrics + rules) ──�
 | `src/transit_sql/data.py` | Downloads 8 MTA datasets from data.ny.gov, aggregates them server-side, builds `data/paratransit.duckdb` |
 | `semantic_layer.yaml` | Table and column descriptions, metric definitions, business rules, few-shot examples |
 | `src/transit_sql/context.py` | Builds the prompt context at four levels of detail (the study's conditions) |
-| `src/transit_sql/agent.py` | One Claude call with structured output → SQL safety check → run → one repair attempt |
+| `src/transit_sql/agent.py` | One Claude call with structured output → SQL safety check → run → one repair attempt on an error or empty result |
 | `src/transit_sql/evaluate.py` | Runs the 32 gold questions and scores execution accuracy |
 | `evals/gold_questions.yaml` | Questions, reference SQL, difficulty tags |
 | `app.py` | Streamlit chat UI |
@@ -69,12 +69,12 @@ First run, 22 Nov 2026: `semantic` mode, `claude-haiku-5-5`, `claude-cli` backen
 
 | Metric | Value |
 |---|---|
-| Execution accuracy | 31/32 (96.9%) |
-| Needed a repair attempt | 0 of 32 |
-| Tokens in / out | 127,456 / 9,789 (about 4,000 in and 300 out per question) |
-| Median time per question | 4.1 s |
+| Execution accuracy | 32/32 (100%) |
+| Needed a repair attempt | 1 of 32 (q29, empty result) |
+| Tokens in / out | 131,776 / 11,295 (about 4,100 in and 350 out per question) |
+| Median time per question | 3.6 s |
 
-The miss was q29, "Which full calendar year had the fewest trips?" The model added a coverage check that no single year can pass, so the query returned no rows. The repair step only fires on SQL errors, so an empty result goes uncaught. Across four runs that day, one or two questions failed per run, and a different one each time, so expect 31 or 32 out of 32 from run to run.
+The run before this one scored 31/32. The miss was q29, "Which full calendar year had the fewest trips?": the model added a coverage check that no single year can pass, so the query returned no rows. The agent now treats an empty result like an error and gives the model one more try, and q29 recovered that way on this run. Earlier runs had one or two misses each, a different question each time, so a single run at 100% does not mean every run will be.
 
 Fixes made along the way:
 
