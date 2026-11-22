@@ -83,3 +83,17 @@ def test_match_rejects_wrong_values():
     gold = pd.DataFrame({"otp": [88.1]})
     assert not results_match(gold, pd.DataFrame({"otp": [0.881]}))
     assert not results_match(gold, pd.DataFrame({"otp": [88.1, 1.0]}))
+
+
+def test_match_months_as_dates():
+    gold = pd.DataFrame({"month": [1, 2], "n": [5, 7]})
+    as_dates = pd.DataFrame({"m": pd.to_datetime(["2025-01-01", "2025-02-01"]), "n": [5, 7]})
+    as_text = pd.DataFrame({"m": ["2025-01", "2025-02"], "n": [5, 7]})
+    assert results_match(gold, as_dates) and results_match(gold, as_text)
+    assert not results_match(gold, pd.DataFrame({"m": ["2025-01", "2025-03"], "n": [5, 7]}))
+
+
+def test_match_label_from_ranked_list():
+    gold = pd.DataFrame({"provider_type": ["Broker"]})
+    assert results_match(gold, pd.DataFrame({"provider_type": ["Broker", "Primary"], "n": [9, 3]}))
+    assert not results_match(gold, pd.DataFrame({"provider_type": ["Primary", "Broker"], "n": [9, 3]}))

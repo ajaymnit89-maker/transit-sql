@@ -4,7 +4,7 @@ Ask questions about NYC Access-A-Ride (paratransit) service in plain English and
 
 > "What was pickup on-time performance in 2025?" → `92.0%`, with the SQL shown.
 
-**Status:** working end to end; first evaluation results pending. Live demo: _coming soon (Streamlit Community Cloud)_.
+**Status:** working end to end; first evaluation scored 31/32 (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
 
 ## Why this project
 
@@ -65,7 +65,20 @@ The model's SQL runs on a read-only DuckDB connection with external file access 
 
 ## Results
 
-_To be filled in after the first evaluation runs: accuracy by context mode and model, cost per question._
+First run, 22 Nov 2026: `semantic` mode, `claude-haiku-5-5`, `claude-cli` backend.
+
+| Metric | Value |
+|---|---|
+| Execution accuracy | 31/32 (96.9%) |
+| Needed a repair attempt | 0 of 32 |
+| Tokens in / out | 125,840 / 10,458 (about 3,900 in and 330 out per question) |
+| Median time per question | 3.2 s |
+
+The one miss is q14, "How many clients were picked up in 2024?" The gold answer sums `pickup_otp_daily.total_pickups` (7.73M). The model followed the rule "Count trips from trips_daily" and returned 9.69M completed trips. The semantic layer describes `total_pickups` as "Clients picked up" and also carries that rule, so the gold question or the rule needs to change.
+
+Before this run, the scorer was too strict and the same answers scored 27/32. It rejected months written as dates (`2025-01-01`) where the gold uses month numbers, and it rejected a ranked list for a "which provider" question whose top row was correct. It now accepts both.
+
+Other context modes and models are still to run.
 
 ## Author
 

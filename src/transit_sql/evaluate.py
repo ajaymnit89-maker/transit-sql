@@ -11,8 +11,9 @@ Run:  uv run python -m transit_sql.evaluate --mode semantic --model claude-haiku
 
 import argparse
 import math
+import re
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import anthropic
@@ -53,10 +54,24 @@ def _column_matches(gold_col: list, pred_col: list) -> bool:
     return all(_same(x, y) for x, y in zip(g, p))
 
 
+def _month(v):
+    """A month written as a date ('2025-01-01', '2025-01') -> its number, else unchanged."""
+    if isinstance(v, date):
+        return float(v.month)
+    if isinstance(v, str) and re.fullmatch(r"\d{4}-\d{2}(-\d{2})?( 00:00:00)?", v.strip()):
+        return float(v.strip()[5:7])
+    return _norm(v)
+
+
 def results_match(gold: pd.DataFrame, pred: pd.DataFrame) -> bool:
-    if pred is None or len(gold) != len(pred):
+    if pred is None:
         return False
-    pred_cols = [[_norm(v) for v in pred[c]] for c in pred.columns]
+    if len(gold) == 1 and len(pred) > 1 and all(isinstance(v, str) for v in gold.iloc[0]):
+        pred = pred.head(1)  # "which X" label answered with a ranked list: judge the top row
+    if len(gold) != len(pred):
+        return False
+    # Each predicted column may also match as month numbers (gold uses month(), models often date_trunc).
+    pred_cols = [[f(v) for v in pred[c]] for c in pred.columns for f in (_norm, _month)]
     for c in gold.columns:
         gold_col = [_norm(v) for v in gold[c]]
         if not any(_column_matches(gold_col, pc) for pc in pred_cols):
