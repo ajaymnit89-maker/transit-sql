@@ -93,7 +93,10 @@ def test_match_months_as_dates():
     assert not results_match(gold, pd.DataFrame({"m": ["2025-01", "2025-03"], "n": [5, 7]}))
 
 
-def test_match_label_from_ranked_list():
+def test_match_top_item_from_ranked_list():
     gold = pd.DataFrame({"provider_type": ["Broker"]})
-    assert results_match(gold, pd.DataFrame({"provider_type": ["Broker", "Primary"], "n": [9, 3]}))
-    assert not results_match(gold, pd.DataFrame({"provider_type": ["Primary", "Broker"], "n": [9, 3]}))
+    assert results_match(gold, pd.DataFrame({"provider_type": ["Broker", "Primary"], "n": [9, 3]}), top_only=True)
+    assert not results_match(gold, pd.DataFrame({"provider_type": ["Primary", "Broker"], "n": [9, 3]}), top_only=True)
+    years = pd.DataFrame({"year": [2020, 2025], "otp": [97.6, 96.8]})
+    assert results_match(pd.DataFrame({"year": [2020]}), years, top_only=True)
+    assert not results_match(pd.DataFrame({"year": [2020]}), years)  # scalar questions stay strict

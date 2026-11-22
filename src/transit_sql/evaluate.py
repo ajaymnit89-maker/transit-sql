@@ -63,11 +63,12 @@ def _month(v):
     return _norm(v)
 
 
-def results_match(gold: pd.DataFrame, pred: pd.DataFrame) -> bool:
+def results_match(gold: pd.DataFrame, pred: pd.DataFrame, top_only: bool = False) -> bool:
+    """top_only: the gold asks for the top item (ends in LIMIT 1), so a ranked list is judged by its first row."""
     if pred is None:
         return False
-    if len(gold) == 1 and len(pred) > 1 and all(isinstance(v, str) for v in gold.iloc[0]):
-        pred = pred.head(1)  # "which X" label answered with a ranked list: judge the top row
+    if top_only:
+        pred = pred.head(1)
     if len(gold) != len(pred):
         return False
     # Each predicted column may also match as month numbers (gold uses month(), models often date_trunc).
@@ -93,7 +94,8 @@ def evaluate(mode: str, model: str, ids: list[str] | None = None) -> pd.DataFram
         if item["sql"] is None:
             correct = not ans.sql  # should decline
         else:
-            correct = ans.error is None and results_match(run_sql(con, item["sql"]), ans.df)
+            top_only = bool(re.search(r"\bLIMIT 1\s*;?\s*$", item["sql"], re.I))
+            correct = ans.error is None and results_match(run_sql(con, item["sql"]), ans.df, top_only)
 
         rows.append({
             "id": item["id"], "mode": mode, "model": model,

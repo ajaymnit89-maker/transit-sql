@@ -26,7 +26,7 @@ tables:
       provider_type: "Primary or Broker only."
       standard: "'15-minutes', '20-minutes' or '30-minutes': how late a pickup may be and still count as on time. The 20-minute standard is only published from late 2021."
       borough: "Pickup borough: Bronx, Brooklyn, Manhattan, Queens, Staten Island, Other (Nassau/Westchester)."
-      total_pickups: Clients picked up.
+      total_pickups: Pickups measured for on-time performance (Primary and Broker only). Use it only as the OTP denominator; for how many trips or clients were picked up, use trips_daily.trips.
       ontime_pickups: Pickups that arrived within the standard after the promised time.
 
   complaints_daily:

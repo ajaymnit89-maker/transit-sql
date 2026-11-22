@@ -40,7 +40,7 @@ Question: *"What was pickup on-time performance in 2025?"*
 
 1. Run the eval in `raw_schema` mode and in `semantic` mode. Open the CSVs in `evals/results/` and find a question that flips from FAIL to PASS. Read both SQL queries. Why did it change?
 2. Add a metric to `semantic_layer.yaml`, e.g. `trips_per_day`. Add a gold question that needs it. Run `pytest`.
-3. Delete the OTP standard rule from `rules:`. Re-run q08 and q14. What breaks?
+3. Delete the OTP standard rule from `rules:`. Re-run q08 and q09. What breaks?
 4. Change `DEFAULT_MODEL` to `claude-sonnet-5-5` and compare accuracy and cost.
 5. Write 5 new gold questions from your MTA experience (public-data facts only).
 

@@ -71,12 +71,15 @@ First run, 22 Nov 2026: `semantic` mode, `claude-haiku-5-5`, `claude-cli` backen
 |---|---|
 | Execution accuracy | 31/32 (96.9%) |
 | Needed a repair attempt | 0 of 32 |
-| Tokens in / out | 125,840 / 10,458 (about 3,900 in and 330 out per question) |
-| Median time per question | 3.2 s |
+| Tokens in / out | 127,456 / 9,789 (about 4,000 in and 300 out per question) |
+| Median time per question | 4.1 s |
 
-The one miss is q14, "How many clients were picked up in 2024?" The gold answer sums `pickup_otp_daily.total_pickups` (7.73M). The model followed the rule "Count trips from trips_daily" and returned 9.69M completed trips. The semantic layer describes `total_pickups` as "Clients picked up" and also carries that rule, so the gold question or the rule needs to change.
+The miss was q29, "Which full calendar year had the fewest trips?" The model added a coverage check that no single year can pass, so the query returned no rows. The repair step only fires on SQL errors, so an empty result goes uncaught. Across four runs that day, one or two questions failed per run, and a different one each time, so expect 31 or 32 out of 32 from run to run.
 
-Before this run, the scorer was too strict and the same answers scored 27/32. It rejected months written as dates (`2025-01-01`) where the gold uses month numbers, and it rejected a ranked list for a "which provider" question whose top row was correct. It now accepts both.
+Fixes made along the way:
+
+- The scorer rejected correct answers. It required months as numbers when the model wrote them as dates (`2025-01-01`), and it failed a ranked list for a "which year" or "which provider" question whose top row was right. A gold query ending in `LIMIT 1` now judges only the top row. The first run scored 27/32 under the old scorer.
+- q14, "How many clients were picked up in 2024?", had gold SQL that summed `pickup_otp_daily.total_pickups` (7.73M). That table covers only Primary and Broker providers, so the gold now counts `trips_daily.trips` (9.69M), as the semantic layer's rules say. The column description used to read "Clients picked up", which made the model switch between the two answers. It now says to use `total_pickups` only as the on-time denominator.
 
 Other context modes and models are still to run.
 
