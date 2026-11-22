@@ -29,17 +29,26 @@ st.caption(
 with st.sidebar:
     mode = st.selectbox("Context given to the model", MODES, index=MODES.index("semantic"),
                         help="How much the model knows about the data. 'semantic' adds metric definitions and business rules.")
-    model = st.text_input("Model", DEFAULT_MODEL)
+    # A fixed list, not free text: the public demo spends the owner's API key.
+    model = st.selectbox("Model", [DEFAULT_MODEL, "claude-sonnet-5-5"])
     st.markdown("**Try:**\n- What was pickup on-time performance in 2025?\n"
                 "- Complaint rate per 1,000 trips by year\n"
                 "- Which borough had the worst on-time performance in 2024?")
 
 if default_backend() == "api" and not os.getenv("ANTHROPIC_API_KEY"):
-    st.warning("Add your Anthropic API key to a `.env` file (see `.env.example`), then restart.")
+    st.warning("Add your Anthropic API key to a `.env` file (see `.env.example`) or to the app's "
+               "Streamlit secrets as ANTHROPIC_API_KEY, then restart.")
     st.stop()
 
-question = st.chat_input("Ask a question about paratransit service")
+# shortcut: per browser session only, a refresh resets it; the hard cap is the API key's spend limit.
+MAX_QUESTIONS = 20
+asked = st.session_state.setdefault("asked", 0)
+question = st.chat_input("Ask a question about paratransit service", max_chars=300,
+                         disabled=asked >= MAX_QUESTIONS)
+if asked >= MAX_QUESTIONS:
+    st.info(f"This demo allows {MAX_QUESTIONS} questions per session.")
 if question:
+    st.session_state.asked += 1
     st.chat_message("user").write(question)
     with st.chat_message("assistant"):
         with st.spinner("Writing SQL..."):
@@ -54,7 +63,10 @@ if question:
         else:
             df = ans.df
             if df.shape == (1, 1):
-                st.metric(df.columns[0], f"{df.iloc[0, 0]:,}" if isinstance(df.iloc[0, 0], (int, float)) else df.iloc[0, 0])
+                v = df.iloc[0, 0]
+                if isinstance(v, float):  # DuckDB SUMs come back as floats; show 9,687,112 or 92.03
+                    v = int(v) if v.is_integer() else round(v, 2)
+                st.metric(df.columns[0], f"{v:,}" if isinstance(v, (int, float)) else v)
             else:
                 st.dataframe(df, hide_index=True)
                 num = df.select_dtypes("number").columns
