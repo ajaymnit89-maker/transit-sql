@@ -1,0 +1,25 @@
+[project]
+name = "transit-sql"
+version = "0.1.0"
+description = "Ask questions about NYC paratransit data in plain English: an LLM text-to-SQL assistant built on a semantic layer, with an evaluation harness."
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=2.12.0",
+    "duckdb>=2.0.1",
+    "pandas>=3.1.1",
+    "pyarrow>=26.0.1",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.4",
+    "requests>=2.34.2",
+    "sqlglot>=30.33.0",
+    "streamlit>=1.67.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.9,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

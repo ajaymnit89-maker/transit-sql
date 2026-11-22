@@ -1,0 +1,248 @@
+# Gold question set for TransitSQL and the semantic-layer study.
+#
+# Each item: a plain-English question, the reference SQL (the "gold" answer),
+# and tags naming what makes it hard. The expected answer is whatever the gold
+# SQL returns on the frozen database; an item with sql: null is unanswerable
+# from this data and the model should decline.
+#
+# Tags:
+#   basic           single table, simple aggregate
+#   ratio_of_sums   a rate that must be SUM/SUM, not AVG of row percentages
+#   otp_standard    must filter pickup_otp_daily to one standard
+#   cross_table     needs two tables aggregated to the same grain
+#   rate_not_count  column is already a rate; must not be summed
+#   time_logic      partial year, "last year", weekdays, period comparison
+#   coverage        data does not cover the period asked about
+#
+# The few-shot examples in semantic_layer.yaml are NOT in this set.
+
+- id: q01
+  question: How many paratransit trips were completed in 2025?
+  tags: [basic]
+  sql: SELECT SUM(trips) AS trips FROM trips_daily WHERE year(service_date) = 2025
+
+- id: q02
+  question: How many riders, including attendants and guests, traveled in 2019?
+  tags: [basic]
+  sql: SELECT SUM(riders) AS riders FROM trips_daily WHERE year(service_date) = 2019
+
+- id: q03
+  question: Which pickup borough had the most trips in 2025?
+  tags: [basic]
+  sql: |
+    SELECT borough FROM trips_daily WHERE year(service_date) = 2025
+    GROUP BY borough ORDER BY SUM(trips) DESC LIMIT 1
+
+- id: q04
+  question: Show total trips by provider type in 2024, largest first.
+  tags: [basic]
+  sql: |
+    SELECT provider_type, SUM(trips) AS trips FROM trips_daily
+    WHERE year(service_date) = 2024 GROUP BY provider_type ORDER BY trips DESC
+
+- id: q05
+  question: On average, how many trips were completed per day in 2025?
+  tags: [time_logic]
+  sql: |
+    SELECT ROUND(SUM(trips) / COUNT(DISTINCT service_date), 1) AS trips_per_day
+    FROM trips_daily WHERE year(service_date) = 2025
+
+- id: q06
+  question: Which month of 2025 had the most trips?
+  tags: [basic]
+  sql: |
+    SELECT month(service_date) AS month FROM trips_daily WHERE year(service_date) = 2025
+    GROUP BY 1 ORDER BY SUM(trips) DESC LIMIT 1
+
+- id: q07
+  question: By what percent did trips change from 2024 to 2025?
+  tags: [time_logic]
+  sql: |
+    SELECT ROUND(100.0 * (SUM(trips) FILTER (WHERE year(service_date) = 2025)
+                        - SUM(trips) FILTER (WHERE year(service_date) = 2024))
+                 / SUM(trips) FILTER (WHERE year(service_date) = 2024), 1) AS pct_change
+    FROM trips_daily
+
+- id: q08
+  question: What was pickup on-time performance in 2025?
+  tags: [otp_standard, ratio_of_sums]
+  sql: |
+    SELECT ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+    FROM pickup_otp_daily WHERE standard = '20-minutes' AND year(service_date) = 2025
+
+- id: q09
+  question: What was pickup on-time performance in 2023 using the 15-minute standard?
+  tags: [otp_standard, ratio_of_sums]
+  sql: |
+    SELECT ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+    FROM pickup_otp_daily WHERE standard = '15-minutes' AND year(service_date) = 2023
+
+- id: q10
+  question: Show pickup on-time performance by borough for 2025, worst first.
+  tags: [otp_standard, ratio_of_sums]
+  sql: |
+    SELECT borough, ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+    FROM pickup_otp_daily WHERE standard = '20-minutes' AND year(service_date) = 2025
+    GROUP BY borough ORDER BY pickup_otp_pct
+
+- id: q11
+  question: Compare pickup on-time performance for Primary and Broker providers in 2025.
+  tags: [otp_standard, ratio_of_sums]
+  sql: |
+    SELECT provider_type, ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+    FROM pickup_otp_daily WHERE standard = '20-minutes' AND year(service_date) = 2025
+    GROUP BY provider_type ORDER BY provider_type
+
+- id: q12
+  question: Show monthly pickup on-time performance for 2026 so far.
+  tags: [otp_standard, ratio_of_sums, time_logic]
+  sql: |
+    SELECT month(service_date) AS month,
+           ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+    FROM pickup_otp_daily WHERE standard = '20-minutes' AND year(service_date) = 2026
+    GROUP BY 1 ORDER BY 1
+
+- id: q13
+  question: Which full calendar year had the best on-time performance under the 30-minute standard?
+  tags: [otp_standard, ratio_of_sums, time_logic]
+  sql: |
+    SELECT year(service_date) AS year FROM pickup_otp_daily
+    WHERE standard = '30-minutes' AND year(service_date) BETWEEN 2017 AND 2025
+    GROUP BY 1 ORDER BY SUM(ontime_pickups) / SUM(total_pickups) DESC LIMIT 1
+
+- id: q14
+  question: How many clients were picked up in 2024?
+  tags: [otp_standard]
+  sql: |
+    SELECT SUM(total_pickups) AS pickups FROM pickup_otp_daily
+    WHERE standard = '20-minutes' AND year(service_date) = 2024
+
+- id: q15
+  question: How many complaints were opened in 2025?
+  tags: [basic]
+  sql: SELECT SUM(complaints) AS complaints FROM complaints_daily WHERE year(opened_date) = 2025
+
+- id: q16
+  question: What were the top 5 complaint categories in 2025?
+  tags: [basic]
+  sql: |
+    SELECT category, SUM(complaints) AS complaints FROM complaints_daily
+    WHERE year(opened_date) = 2025 GROUP BY category ORDER BY complaints DESC LIMIT 5
+
+- id: q17
+  question: What was the complaint rate per 1,000 trips in 2024?
+  tags: [cross_table, ratio_of_sums]
+  sql: |
+    SELECT ROUND(1000.0 *
+      (SELECT SUM(complaints) FROM complaints_daily WHERE year(opened_date) = 2024) /
+      (SELECT SUM(trips) FROM trips_daily WHERE year(service_date) = 2024), 2)
+      AS complaint_rate_per_1000
+
+- id: q18
+  question: Which provider type had the most complaints in 2023?
+  tags: [basic]
+  sql: |
+    SELECT provider_type FROM complaints_daily WHERE year(opened_date) = 2023
+    GROUP BY provider_type ORDER BY SUM(complaints) DESC LIMIT 1
+
+- id: q19
+  question: How many late pickup complaints were there each month in 2025?
+  tags: [basic, time_logic]
+  sql: |
+    SELECT month(opened_date) AS month, SUM(complaints) AS complaints FROM complaints_daily
+    WHERE category = 'Service - Late Pickup' AND year(opened_date) = 2025
+    GROUP BY 1 ORDER BY 1
+
+- id: q20
+  question: What was the average ride time in minutes in 2023?
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT ROUND(SUM(ride_time_min) / SUM(trips), 1) AS avg_ride_time_min
+    FROM ride_time_monthly WHERE year(month) = 2023
+
+- id: q21
+  question: Compare average ride time for peak and off-peak trips in 2022.
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT peak_hour, ROUND(SUM(ride_time_min) / SUM(trips), 1) AS avg_ride_time_min
+    FROM ride_time_monthly WHERE year(month) = 2022 GROUP BY peak_hour ORDER BY peak_hour
+
+- id: q22
+  question: What percent of trips met the maximum ride time in 2023?
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT ROUND(100.0 * SUM(trips) FILTER (WHERE within_max_ride_time) / SUM(trips), 1)
+      AS max_ride_time_compliance_pct
+    FROM ride_time_monthly WHERE year(month) = 2023
+
+- id: q23
+  question: What was the average ride time for trips starting in Staten Island in 2021?
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT ROUND(SUM(ride_time_min) / SUM(trips), 1) AS avg_ride_time_min
+    FROM ride_time_monthly WHERE origin_borough = 'Staten Island' AND year(month) = 2021
+
+- id: q24
+  question: What was the average provider no-show rate for Primary providers in 2023?
+  tags: [rate_not_count]
+  sql: |
+    SELECT ROUND(AVG(no_shows_per_1000), 2) AS no_shows_per_1000
+    FROM provider_no_shows_monthly WHERE provider_type = 'Primary' AND year(month) = 2023
+
+- id: q25
+  question: In which month of 2022 did Broker providers have their highest no-show rate?
+  tags: [rate_not_count]
+  sql: |
+    SELECT month(month) AS month FROM provider_no_shows_monthly
+    WHERE provider_type = 'Broker' AND year(month) = 2022
+    ORDER BY no_shows_per_1000 DESC LIMIT 1
+
+- id: q26
+  question: How many riders were there per trip on average in 2025?
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT ROUND(SUM(riders) / SUM(trips), 2) AS riders_per_trip
+    FROM trips_daily WHERE year(service_date) = 2025
+
+- id: q27
+  question: What share of 2025 trips were provided by Broker providers, in percent?
+  tags: [ratio_of_sums]
+  sql: |
+    SELECT ROUND(100.0 * SUM(trips) FILTER (WHERE provider_type = 'Broker') / SUM(trips), 1)
+      AS broker_share_pct
+    FROM trips_daily WHERE year(service_date) = 2025
+
+- id: q28
+  question: How many trips were completed on weekends versus weekdays in 2025?
+  tags: [time_logic]
+  sql: |
+    SELECT CASE WHEN dayofweek(service_date) IN (0, 6) THEN 'Weekend' ELSE 'Weekday' END AS day_type,
+           SUM(trips) AS trips
+    FROM trips_daily WHERE year(service_date) = 2025 GROUP BY 1 ORDER BY 1
+
+- id: q29
+  question: Which full calendar year had the fewest trips?
+  tags: [time_logic]
+  sql: |
+    SELECT year(service_date) AS year FROM trips_daily
+    WHERE year(service_date) BETWEEN 2017 AND 2025
+    GROUP BY 1 ORDER BY SUM(trips) LIMIT 1
+
+- id: q30
+  question: What was the complaint rate per 1,000 trips last year?
+  tags: [cross_table, ratio_of_sums, time_logic]
+  sql: |
+    SELECT ROUND(1000.0 *
+      (SELECT SUM(complaints) FROM complaints_daily WHERE year(opened_date) = 2025) /
+      (SELECT SUM(trips) FROM trips_daily WHERE year(service_date) = 2025), 2)
+      AS complaint_rate_per_1000
+
+- id: q31
+  question: What was the average ride time in 2025?
+  tags: [coverage]
+  sql: null
+
+- id: q32
+  question: How many provider no-shows did Broker providers have in 2024?
+  tags: [coverage, rate_not_count]
+  sql: null

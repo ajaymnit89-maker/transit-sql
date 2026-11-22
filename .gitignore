@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+data/paratransit.duckdb
+evals/results/*.csv
+!evals/results/.gitkeep

@@ -1,0 +1,113 @@
+# Semantic layer for MTA NYCT Paratransit (Access-A-Ride) open data.
+# Same idea as a Power BI semantic model: tables, column meanings, and
+# metrics defined ONCE so every question uses the same business logic.
+#
+# The LLM sees different parts of this file depending on the context mode
+# (see src/transit_sql/context.py):
+#   raw_schema       -> table + column names/types only (read from DuckDB)
+#   schema_dict      -> + table/column descriptions below
+#   semantic         -> + metrics and business rules below
+#   semantic_fewshot -> + worked examples below
+
+tables:
+  trips_daily:
+    description: Completed paratransit trips per service day, provider type and pickup borough. Oct 2016 - Sep 2026.
+    columns:
+      service_date: Service date.
+      provider_type: "Provider type: Primary, Broker, Supplemental, E-Hail Pilot, Taxi, Contingency, All Others."
+      borough: "Pickup borough or county: Bronx, Brooklyn, Manhattan, Queens, Staten Island, Nassau, Westchester, Other."
+      trips: Number of completed trips (one per registered client trip).
+      riders: Riders on those trips, including personal care attendants and guests. Always >= trips.
+
+  pickup_otp_daily:
+    description: Pickup on-time performance per service day, provider type, OTP standard and pickup borough. Oct 2016 - Sep 2026. Each trip appears once PER STANDARD.
+    columns:
+      service_date: Service date.
+      provider_type: "Primary or Broker only."
+      standard: "'15-minutes', '20-minutes' or '30-minutes': how late a pickup may be and still count as on time. The 20-minute standard is only published from late 2021."
+      borough: "Pickup borough: Bronx, Brooklyn, Manhattan, Queens, Staten Island, Other (Nassau/Westchester)."
+      total_pickups: Clients picked up.
+      ontime_pickups: Pickups that arrived within the standard after the promised time.
+
+  complaints_daily:
+    description: Customer complaints per day the complaint was opened, by provider type and category. Oct 2016 - Sep 2026.
+    columns:
+      opened_date: Date the complaint ticket was opened (not the date of the trip).
+      provider_type: "Primary, Broker, Supplemental, E-Hail, Other/Unidentified Provider, Non-Transportation."
+      category: "Complaint category, e.g. 'Service - Late Pickup', 'Driver', 'Scheduling', 'Eligibility'."
+      complaints: Number of complaints.
+
+  ride_time_monthly:
+    description: Completed trips and total ride minutes per month, provider type, peak period, origin borough and whether the trip met the maximum ride time. Jan 2017 - Dec 2023 only.
+    columns:
+      month: First day of the month.
+      provider_type: "Primary or Broker only."
+      peak_hour: "'Peak' (weekday 7-10am and 4-7pm starts) or 'Off-Peak'."
+      origin_borough: Pickup borough or county.
+      within_max_ride_time: True if the trips met the maximum ride time for their distance.
+      trips: Completed trips.
+      ride_time_min: Total ride minutes across those trips.
+
+  provider_no_shows_monthly:
+    description: Provider no-show RATE per month and provider type. Oct 2016 - Dec 2023 only.
+    columns:
+      month: First day of the month.
+      provider_type: "Primary or Broker only."
+      no_shows_per_1000: Provider no-shows per 1,000 scheduled trips (a rate, not a count).
+
+metrics:
+  trips:
+    sql: SUM(trips_daily.trips)
+    description: Completed trips.
+  riders:
+    sql: SUM(trips_daily.riders)
+    description: Riders including attendants and guests.
+  pickup_otp_pct:
+    sql: 100.0 * SUM(pickup_otp_daily.ontime_pickups) / SUM(pickup_otp_daily.total_pickups)
+    description: Pickup on-time performance in percent. Default standard is '20-minutes' (the official MTA standard) unless the question names another one.
+    filter: pickup_otp_daily.standard = '20-minutes'
+  complaints:
+    sql: SUM(complaints_daily.complaints)
+    description: Complaints opened.
+  complaint_rate_per_1000:
+    sql: 1000.0 * SUM(complaints) / SUM(trips)
+    description: Complaints per 1,000 completed trips. Aggregate complaints and trips SEPARATELY to the same grain (e.g. month) before dividing; never join the daily tables row by row.
+  avg_ride_time_min:
+    sql: SUM(ride_time_monthly.ride_time_min) / SUM(ride_time_monthly.trips)
+    description: Average ride time in minutes per completed trip.
+  max_ride_time_compliance_pct:
+    sql: 100.0 * SUM(CASE WHEN ride_time_monthly.within_max_ride_time THEN ride_time_monthly.trips END) / SUM(ride_time_monthly.trips)
+    description: Percent of trips within the maximum ride time.
+  provider_no_show_rate:
+    sql: AVG(provider_no_shows_monthly.no_shows_per_1000)
+    description: Provider no-shows per 1,000 scheduled trips. Already a rate; average it across months, never SUM it.
+
+rules:
+  - Percentages and rates are computed as ratio-of-sums (SUM(numerator) / SUM(denominator)), never as the average of daily or row-level percentages.
+  - pickup_otp_daily repeats every trip once per standard. Always filter to ONE standard; never sum pickups across standards.
+  - Count trips from trips_daily, not from pickup_otp_daily.
+  - '"Last year" or "most recent full year" means 2025. The data ends on 2026-09-30, so 2026 is a partial year.'
+  - Ride time and no-show data end in Dec 2023; say so if a question asks about later periods.
+  - Use DuckDB SQL. Use year(), month(), date_trunc('month', ...) for dates.
+
+examples:
+  - question: What was the overall pickup on-time performance in 2024?
+    sql: |
+      SELECT ROUND(100.0 * SUM(ontime_pickups) / SUM(total_pickups), 1) AS pickup_otp_pct
+      FROM pickup_otp_daily
+      WHERE standard = '20-minutes' AND year(service_date) = 2024
+  - question: Monthly complaint rate per 1,000 trips in 2025.
+    sql: |
+      WITH c AS (
+        SELECT date_trunc('month', opened_date) AS month, SUM(complaints) AS complaints
+        FROM complaints_daily WHERE year(opened_date) = 2025 GROUP BY 1),
+      t AS (
+        SELECT date_trunc('month', service_date) AS month, SUM(trips) AS trips
+        FROM trips_daily WHERE year(service_date) = 2025 GROUP BY 1)
+      SELECT t.month, ROUND(1000.0 * c.complaints / t.trips, 2) AS complaint_rate_per_1000
+      FROM t JOIN c USING (month) ORDER BY t.month
+  - question: Which provider type had the higher average no-show rate in 2019?
+    sql: |
+      SELECT provider_type, ROUND(AVG(no_shows_per_1000), 2) AS provider_no_show_rate
+      FROM provider_no_shows_monthly WHERE year(month) = 2019
+      GROUP BY provider_type ORDER BY provider_no_show_rate DESC
