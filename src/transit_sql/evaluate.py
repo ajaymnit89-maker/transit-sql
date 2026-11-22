@@ -6,7 +6,7 @@ same number of rows, and every gold column matches some predicted column
 columns and different column names are fine. For unanswerable questions
 (gold sql: null) the model must decline.
 
-Run:  uv run python -m transit_sql.evaluate --mode semantic --model claude-haiku-5-5
+Run:  uv run python -m transit_sql.evaluate --mode semantic --model claude-haiku-5-5 --runs 5
 """
 
 import argparse
@@ -113,13 +113,20 @@ def main() -> None:
     p.add_argument("--mode", default="semantic", choices=MODES)
     p.add_argument("--model", default=DEFAULT_MODEL)
     p.add_argument("--ids", nargs="*", help="only these question ids")
+    p.add_argument("--runs", type=int, default=1, help="repeat the set; the model is not deterministic")
     args = p.parse_args()
 
-    df = evaluate(args.mode, args.model, args.ids)
+    df = pd.concat([evaluate(args.mode, args.model, args.ids).assign(run=i + 1) for i in range(args.runs)])
     RESULTS.mkdir(parents=True, exist_ok=True)
     out = RESULTS / f"{datetime.now():%Y%m%d-%H%M%S}_{args.model}_{args.mode}.csv"
     df.to_csv(out, index=False)
     print(f"\nExecution accuracy: {df.correct.mean():.1%} ({df.correct.sum()}/{len(df)})")
+    if args.runs > 1:
+        per_run = df.groupby("run").correct.mean()
+        print(f"Per run: {', '.join(f'{a:.1%}' for a in per_run)} (min {per_run.min():.1%}, max {per_run.max():.1%})")
+        flaky = df.groupby("id").correct.mean()
+        print("Questions that failed at least once (pass rate):")
+        print(flaky[flaky < 1].round(2).to_string() if (flaky < 1).any() else "  none")
     print(df.groupby(df.tags.str.split(",").str[0]).correct.mean().round(2).to_string())
     print(f"Tokens in/out: {df.input_tokens.sum():,} / {df.output_tokens.sum():,}")
     print(f"Saved {out}")

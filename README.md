@@ -4,7 +4,7 @@ Ask questions about NYC Access-A-Ride (paratransit) service in plain English and
 
 > "What was pickup on-time performance in 2025?" → `92.0%`, with the SQL shown.
 
-**Status:** working end to end; the latest evaluation scored 32/32 (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
+**Status:** working end to end; the evaluation scored 160/160 over 5 runs (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
 
 ## Why this project
 
@@ -65,23 +65,25 @@ The model's SQL runs on a read-only DuckDB connection with external file access 
 
 ## Results
 
-First run, 22 Nov 2026: `semantic` mode, `claude-haiku-5-5`, `claude-cli` backend.
+22 Nov 2026: `semantic` mode, `claude-haiku-5-5`, `claude-cli` backend, the 32 gold questions run 5 times (`--runs 5`).
 
 | Metric | Value |
 |---|---|
-| Execution accuracy | 32/32 (100%) |
-| Needed a repair attempt | 1 of 32 (q29, empty result) |
-| Tokens in / out | 131,776 / 11,295 (about 4,100 in and 350 out per question) |
-| Median time per question | 3.6 s |
+| Execution accuracy | 160/160 (100%), every run 32/32 |
+| Needed a repair attempt | 0 of 160 |
+| Tokens per question, in / out | about 4,000 / 320 |
+| Median time per question | 3.4 s |
 
-The run before this one scored 31/32. The miss was q29, "Which full calendar year had the fewest trips?": the model added a coverage check that no single year can pass, so the query returned no rows. The agent now treats an empty result like an error and gives the model one more try, and q29 recovered that way on this run. Earlier runs had one or two misses each, a different question each time, so a single run at 100% does not mean every run will be.
+Single runs earlier that day scored 27 to 32 out of 32 while the fixes below went in. The last of those fixes gives the model one more try when its query returns no rows. That rescued q29, "Which full calendar year had the fewest trips?", in one run, where the model had added a coverage check no year could pass.
+
+With the semantic layer, this question set no longer separates good from bad. The useful comparison is now against the leaner context modes and other models.
 
 Fixes made along the way:
 
 - The scorer rejected correct answers. It required months as numbers when the model wrote them as dates (`2025-01-01`), and it failed a ranked list for a "which year" or "which provider" question whose top row was right. A gold query ending in `LIMIT 1` now judges only the top row. The first run scored 27/32 under the old scorer.
 - q14, "How many clients were picked up in 2024?", had gold SQL that summed `pickup_otp_daily.total_pickups` (7.73M). That table covers only Primary and Broker providers, so the gold now counts `trips_daily.trips` (9.69M), as the semantic layer's rules say. The column description used to read "Clients picked up", which made the model switch between the two answers. It now says to use `total_pickups` only as the on-time denominator.
 
-Other context modes and models are still to run.
+Results for the other context modes and models are still to come.
 
 ## Author
 
