@@ -4,7 +4,11 @@ Ask questions about NYC Access-A-Ride (paratransit) service in plain English and
 
 > "What was pickup on-time performance in 2025?" → `92.0%`, with the SQL shown.
 
-**Status:** working end to end; the evaluation scored 160/160 over 5 runs (see Results). Live demo: _coming soon (Streamlit Community Cloud)_.
+**Status:** working end to end; the evaluation scored 160/160 over 5 runs (see Results).
+
+![TransitSQL answering two questions: pickup on-time performance for 2025, then complaint rate per 1,000 trips by year, each with the SQL it wrote](docs/demo.gif)
+
+_Recorded locally with Claude Haiku 5.5 through the `claude-cli` backend. There is no hosted version; run it yourself with the steps below._
 
 ## Why this project
 
@@ -57,7 +61,7 @@ uv run python -m transit_sql.data # optional: re-download the data
 
 **Two ways to call Claude** (`TRANSITSQL_BACKEND`, picked automatically):
 - `claude-cli`: uses your Claude Pro/Max subscription through the `claude` command (Claude Code, headless, no tools, our own system prompt). No API key. Good for local development and the study; subject to your plan's usage limits.
-- `api`: the Anthropic API, billed per token. Used when `ANTHROPIC_API_KEY` is set (copy `.env.example` to `.env`). Needed for the public deployment.
+- `api`: the Anthropic API, billed per token. Used when `ANTHROPIC_API_KEY` is set (copy `.env.example` to `.env`). Use it if you have no Claude subscription or want to host the app.
 
 ## Safety
 

@@ -64,8 +64,8 @@ if question:
             df = ans.df
             if df.shape == (1, 1):
                 v = df.iloc[0, 0]
-                if isinstance(v, float):  # DuckDB SUMs come back as floats; show 9,687,112 or 92.03
-                    v = int(v) if v.is_integer() else round(v, 2)
+                if isinstance(v, float):  # DuckDB SUMs come back as floats: show 9,687,112 but keep 92.0 (a %)
+                    v = int(v) if v.is_integer() and abs(v) >= 1000 else round(v, 2)
                 st.metric(df.columns[0], f"{v:,}" if isinstance(v, (int, float)) else v)
             else:
                 st.dataframe(df, hide_index=True)
@@ -75,5 +75,5 @@ if question:
         if ans.notes:
             st.caption(ans.notes)
         with st.expander("SQL"):
-            st.code(ans.sql or "(none)", language="sql")
+            st.code(ans.sql or "(none)", language="sql", wrap_lines=True)
             st.caption(f"{ans.attempts} attempt(s), {ans.input_tokens:,} input / {ans.output_tokens:,} output tokens")
